@@ -1,4 +1,5 @@
-name: Flutter CI
+
+name: Flutter CI/CD
 
 on:
   push:
@@ -14,24 +15,25 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: flutter-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  flutter-test:
-    name: Flutter Analyze and Test
+  build-and-test:
+    name: Flutter Build and Test
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Download project source code
       - name: Checkout code
         uses: actions/checkout@v6
 
-      # 2. Install Java for Android tooling
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: '17'
 
-      # 3. Install Flutter SDK
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -39,18 +41,39 @@ jobs:
           flutter-version: 3.47.4
           cache: true
 
-      # 4. Check Flutter version
-      - name: Flutter version
+      - name: Show Flutter version
         run: flutter --version
 
-      # 5. Download dependencies
       - name: Install dependencies
         run: flutter pub get
 
-      # 6. Analyze code
-      - name: Analyze Flutter code
+      - name: Analyze code
         run: flutter analyze
 
-      # 7. Run unit and widget tests
-      - name: Run Flutter tests
+      - name: Run tests
         run: flutter test --coverage
+
+      - name: Build APK
+        run: flutter build apk --release
+
+      - name: Build AAB
+        run: flutter build appbundle --release
+
+      - name: Upload Android builds
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-android-builds
+          path: |
+            build/app/outputs/flutter-apk/app-release.apk
+            build/app/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload test coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-test-coverage
+          path: coverage/lcov.info
+          if-no-files-found: warn
+          retention-days: 7
