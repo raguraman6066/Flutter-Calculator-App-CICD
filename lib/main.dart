@@ -1,3 +1,5 @@
+import 'package:expense_tracker/firebase_options.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 
 import 'core/constants/app_layout.dart';
@@ -7,7 +9,11 @@ import 'features/calculator/presentation/screens/calculator_dark.dart';
 import 'features/calculator/presentation/screens/calculator_light.dart';
 import 'features/calculator/presentation/screens/calculator_tablet.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
   runApp(const CalculatorApp());
 }
 

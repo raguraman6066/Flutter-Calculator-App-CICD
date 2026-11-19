@@ -1,4 +1,3 @@
-
 name: Flutter CI/CD
 
 on:
@@ -20,6 +19,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # =================================
+  # JOB 1: CONTINUOUS INTEGRATION
+  # =================================
   build-and-test:
     name: Flutter Build and Test
     runs-on: ubuntu-latest
@@ -32,13 +34,13 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version: 3.47.4
+          flutter-version: "3.47.4"
           cache: true
 
       - name: Show Flutter version
@@ -53,22 +55,6 @@ jobs:
       - name: Run tests
         run: flutter test --coverage
 
-      - name: Build APK
-        run: flutter build apk --release
-
-      - name: Build AAB
-        run: flutter build appbundle --release
-
-      - name: Upload Android builds
-        uses: actions/upload-artifact@v4
-        with:
-          name: flutter-android-builds
-          path: |
-            build/app/outputs/flutter-apk/app-release.apk
-            build/app/outputs/bundle/release/app-release.aab
-          if-no-files-found: error
-          retention-days: 7
-
       - name: Upload test coverage
         if: always()
         uses: actions/upload-artifact@v4
@@ -77,3 +63,82 @@ jobs:
           path: coverage/lcov.info
           if-no-files-found: warn
           retention-days: 7
+
+  # =================================
+  # JOB 2: CONTINUOUS DELIVERY
+  # =================================
+  android-cd:
+    name: Android CD
+    runs-on: ubuntu-latest
+
+    # Wait until CI succeeds
+    needs: build-and-test
+
+    # Deploy only when code is pushed or merged into main
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: "3.47.4"
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # Restore JKS signing credentials
+      - name: Configure Android signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 --decode > android/app/upload-keystore.jks
+
+          cat > android/key.properties <<EOF
+          storePassword=$STORE_PASSWORD
+          keyPassword=$KEY_PASSWORD
+          keyAlias=$KEY_ALIAS
+          storeFile=upload-keystore.jks
+          EOF
+
+      # Generate signed APK
+      - name: Build signed APK
+        run: flutter build apk --release
+
+      # Generate signed AAB
+      - name: Build signed AAB
+        run: flutter build appbundle --release
+
+      # Save builds in GitHub Actions artifacts
+      - name: Upload Android builds
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-android-release
+          path: |
+            build/app/outputs/flutter-apk/app-release.apk
+            build/app/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+          retention-days: 14
+
+      # CD 1: Firebase App Distribution
+      - name: Distribute APK to Firebase
+        uses: wzieba/Firebase-Distribution-Github-Action@v1
+        with:
+          appId: ${{ secrets.FIREBASE_APP_ID }}
+          serviceCredentialsFileContent: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          groups: testers
+          file: build/app/outputs/flutter-apk/app-release.apk
+          releaseNotes: "New Android build from GitHub Actions"
