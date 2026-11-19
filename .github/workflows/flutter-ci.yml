@@ -1,0 +1,56 @@
+name: Flutter CI
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+
+  pull_request:
+    branches:
+      - main
+      - develop
+
+permissions:
+  contents: read
+
+jobs:
+  flutter-test:
+    name: Flutter Analyze and Test
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Download project source code
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      # 2. Install Java for Android tooling
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # 3. Install Flutter SDK
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.4
+          cache: true
+
+      # 4. Check Flutter version
+      - name: Flutter version
+        run: flutter --version
+
+      # 5. Download dependencies
+      - name: Install dependencies
+        run: flutter pub get
+
+      # 6. Analyze code
+      - name: Analyze Flutter code
+        run: flutter analyze
+
+      # 7. Run unit and widget tests
+      - name: Run Flutter tests
+        run: flutter test --coverage
